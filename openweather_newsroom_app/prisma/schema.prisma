@@ -1,0 +1,47 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL") // .env 파일에 DATABASE_URL="mysql://root:비밀번호@localhost:3306/newsroom_db" 설정
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model AppUser {
+  userId      BigInt        @id @default(autoincrement()) @map("user_id")
+  name        String        @db.VarChar(100)
+  email       String        @unique @db.VarChar(150)
+  newsArticles NewsArticle[]
+
+  @@map("app_user")
+}
+
+model WeatherObservation {
+  weatherId    BigInt        @id @default(autoincrement()) @map("weather_id")
+  cityCode     String        @map("city_code") @db.VarChar(20)
+  observedAt   DateTime      @map("observed_at")
+  temperature  Decimal       @db.Decimal(4, 1)
+  sourceName   String        @map("source_name") @db.VarChar(100)
+  newsArticles NewsArticle[]
+
+  @@map("weather_observation")
+}
+
+model NewsArticle {
+  articleId    BigInt              @id @default(autoincrement()) @map("article_id")
+  userId       BigInt              @map("user_id")
+  weatherId    BigInt?             @map("weather_id")
+  title        String              @db.VarChar(255)
+  body         String              @db.Text
+  reviewStatus String              @default("PENDING") @map("review_status") @db.VarChar(20)
+  
+  appUser            AppUser             @relation(fields: [userId], references: [userId], onDelete: Restrict)
+  weatherObservation WeatherObservation? @relation(fields: [weatherId], references: [weatherId], onDelete: SetNull)
+
+  @@map("news_article")
+}
+
+//bash
+//# 필수 패키지 설치
+//npm install express dotenv cors
+//npm install -D typescript @types/express @types/node ts-node-dev prisma @prisma/client

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeteorPress - 실시간 기상 속보 및 알림</title>
+    <link rel="preconnect" href="https://googleapis.com">
+    <link rel="preconnect" href="https://gstatic.com" crossorigin>
+    <link href="https://googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --kbs-blue: #012347;       /* KBS 특유의 신뢰감 높은 메인 블루 */
+            --kbs-dark-blue: #003570;
+            --kbs-red: #ff2a2a;        /* 속보 태그용 레드 */
+            --bg-gray: #f4f6f9;        /* 배경 회색 */
+            --border-gray: #e5e7eb;
+            --text-dark: #111827;
+            --text-muted: #6b7280;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Noto Sans KR', sans-serif; }
+        body { background-color: var(--bg-gray); color: var(--text-dark); min-height: 100vh; }
+
+        /* 👑 GNB 상단 헤더 */
+        header {
+            background-color: #ffffff;
+            border-bottom: 1px solid var(--border-gray);
+            padding: 0.75rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo-area { display: flex; align-items: center; gap: 1rem; }
+        .logo-area h1 { font-size: 1.4rem; color: var(--kbs-blue); font-weight: 800; letter-spacing: -1px; }
+        .btn-reporter {
+            background-color: transparent; border: 1px solid var(--kbs-blue); color: var(--kbs-blue);
+            padding: 0.4rem 0.8rem; border-radius: 4px; font-weight: 500; font-size: 0.85rem; cursor: pointer;
+        }
+        .btn-reporter:hover { background-color: var(--kbs-blue); color: white; }
+
+        /* 🟦 메인 탑 속보 배너 (KBSAI 디자인 핵심) */
+        .top-banner {
+            background: linear-gradient(135deg, var(--kbs-blue) 0%, var(--kbs-dark-blue) 100%);
+            color: white;
+            padding: 2.5rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .banner-title h2 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+        .banner-title p { font-size: 0.95rem; color: #93c5fd; }
+        .banner-right { font-size: 1.25rem; font-weight: 500; opacity: 0.8; letter-spacing: 1px; }
+
+        /* 📦 레이아웃 (메인 타임라인 + 우측 헤드라인) */
+        .container {
+            max-width: 1300px;
+            width: 100%;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            gap: 2rem;
+        }
+        @media (max-width: 1024px) { .container { grid-template-columns: 1fr; } }
+
+        /* 🕒 왼쪽: 실시간 기상 관측 타임라인 섹션 */
+        .timeline-section { background: white; border-radius: 8px; border: 1px solid var(--border-gray); padding: 2rem; }
+        .date-badge-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-gray); }
+        .date-text { font-size: 1.2rem; font-weight: 700; }
+        .today-tag { background-color: var(--kbs-blue); color: white; font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 12px; font-weight: 500; }
+
+        .timeline-list { position: relative; padding-left: 2rem; }
+        .timeline-list::before {
+            content: ''; position: absolute; left: 4px; top: 8px; bottom: 8px; width: 2px; background-color: var(--border-gray);
+        }
+
+        .timeline-item { position: relative; margin-bottom: 2rem; cursor: pointer; transition: all 0.2s; padding: 0.5rem; border-radius: 6px; }
+        .timeline-item:hover { background-color: #f8fafc; }
+        .timeline-item::before {
+            content: ''; position: absolute; left: -22px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background-color: #93c5fd; border: 2px solid white; box-shadow: 0 0 0 2px #93c5fd;
+        }
+        .timeline-item.latest::before { background-color: var(--kbs-blue); box-shadow: 0 0 0 2px var(--kbs-blue); }
+
+        .item-time { font-size: 1.05rem; font-weight: 700; color: var(--text-dark); display: inline-block; width: 60px; }
+        .badge-alert { background-color: var(--kbs-red); color: white; font-size: 0.75rem; padding: 0.15rem 0.4rem; border-radius: 3px; font-weight: 700; margin-left: 0.5rem; vertical-align: middle; }
+        
+        .item-content { margin-top: 0.75rem; display: flex; justify-content: space-between; align-items: center; }
+        .weather-text { font-size: 1.1rem; font-weight: 500; color: #1f2937; }
+        .weather-text strong { color: var(--kbs-blue); font-weight: 700; }
+        .btn-connect { background-color: white; border: 1px solid var(--border-gray); padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; color: #4b5563; cursor: pointer; }
+        .btn-connect:hover { background-color: #f3f4f6; color: var(--text-dark); }
+
+        /* 📰 우측: 기상 특보 헤드라인 섹션 */
+        .headline-section { display: flex; flex-direction: column; gap: 1.5rem; }
+        .headline-title { font-size: 1.15rem; font-weight: 700; padding-bottom: 0.5rem; border-bottom: 2px solid var(--text-dark); }
+        
+        .headline-card { background: white; border: 1px solid var(--border-gray); border-radius: 6px; overflow: hidden; }
+        .headline-img-mock { background-color: #cbd5e1; height: 140px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; }
+        .headline-body { padding: 1rem; }
+        .headline-card h3 { font-size: 1rem; font-weight: 700; line-height: 1.4; margin-bottom: 0.5rem; }
+        .headline-card p { font-size: 0.85rem; color: var(--text-muted); }
+
+        /* ✍️ 하단 고정형 기자 연동 바 */
+        .reporter-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; background-color: #1e293b; color: white; padding: 1rem 2rem;
+            display: none; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.15); z-index: 1000;
+        }
+        .reporter-bar.active { display: flex; }
+        .bar-info { font-size: 0.95rem; }
+        .bar-info strong { color: #38bdf8; }
+        .bar-inputs { display: flex; gap: 0.5rem; flex: 1; max-width: 700px; margin: 0 2rem; }
+        .bar-inputs input { padding: 0.5rem; border-radius: 4px; border: none; font-size: 0.9rem; flex: 1; }
+        .btn-send { background-color: var(--kbs-blue); color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 4px; font-weight: 500; cursor: pointer; }
+        .btn-send:hover { background-color: #1d4ed8; }
+    </style>
+</head>
+<body>
+
+    <!-- 👑 글로벌 헤더 -->
+    <header>
+        <div class="logo-area">
+            <h1>MBC 날씨정보 뉴스룸</h1>
+        </div>
+        <div>
+            <button class="btn-reporter" onclick="toggleReporterBar()">✍️ 기자 연동 모드 켜기</button>
+        </div>
+    </header>
+
+    <!-- 🟦 메인 파란색 속보 대형 배너 (요청 이미지 양식 일치) -->
+    <div class="top-banner">
+        <div class="banner-title">
+            <h2>기상 관측 및 알림 <span style="font-size:1rem; font-weight:normal; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px;">실시간 전국 날씨 속보</span></h2>
+            <p>전국 통합 기상 관측망 기반 실시간 동향 정보 리포트</p>
+        </div>
+        <div class="banner-right">
+            기상방역주관사
+        </div>
+    </div>
+
+    <!-- 📦 메인 타임라인 구조 컨테이너 -->
+    <div class="container">
+        
+        <!-- 왼쪽: 실시간 기상 알림 타임라인 리스트 -->
+        <main class="timeline-section">
+            <div class="date-badge-row">
+                <span class="date-text">2026.10.06 화요일</span>
+                <span class="today-tag">오늘</span>
+            </div>
+
+            <div class="timeline-list" id="timelineContainer">
+                <!-- 타임라인 아이템 1 (최신) -->
+                <div class="timeline-item latest" onclick="bindWeatherToBar(105, '서울 종로구', 18.5)">
+                    <div>
+                        <span class="item-time">17:25</span>
+                        <span class="badge-alert">기상관측</span>
+                    </div>
+                    <div class="item-content">
+                        <div class="weather-text">[실시간] <strong>서울 종로구</strong> "기온 18.5°C, 강수량 0.0mm 파악... 북서풍 풍속 안정적"</div>
+                        <button class="btn-connect">연동하기</button>
+                    </div>
+                </div>
+
+                <!-- 타임라인 아이템 2 -->
+                <div class="timeline-item" onclick="bindWeatherToBar(104, '부산 해운대', 22.1)">
+                    <div>
+                        <span class="item-time">17:24</span>
+                        <span class="badge-alert">기상관측</span>
+                    </div>
+                    <div class="item-content">
+                        <div class="weather-text">[실시간] <strong>부산 해운대</strong> "기온 22.1°C, 강수량 12.5mm 강우 감지... 해상 유의 바람"</div>
+                        <button class="btn-connect">연동하기</button>
+                    </div>
+                </div>
+
+                <!-- 타임라인 아이템 3 -->
+                <div class="timeline-item" onclick="bindWeatherToBar(103, '제주 서귀포', 24.0)">
+                    <div>
+                        <span class="item-time">16:50</span>
+                        <span class="badge-alert">기상관측</span>
+                    </div>
+                    <div class="item-content">
+                        <div class="weather-text">[실시간] <strong>제주 서귀포</strong> "기온 24.0°C, 대기 습도 고조에 따른 저기압 발달 중"</div>
+                        <button class="btn-connect">연동하기</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 우측: 헤드라인 및 주요 뉴스 큐레이션 -->
+        <aside class="headline-section">
+            <div class="headline-title">기상 헤드라인</div>
+            
+            <div class="headline-card">
+                <div class="headline-img-mock">⛈️</div>
+                <div class="headline-body">
